@@ -1,0 +1,87 @@
+﻿@page "/"
+@using HelloDapr.Api.Data
+@inject MyDaprService DaprService
+
+<PageTitle>Hello Dapr!</PageTitle>
+
+<h1>Hello Dapr!</h1>
+
+@if (_withUrl == null)
+{
+	<p><em>Loading...</em></p>
+}
+else
+{
+	<h2>With URL</h2>
+	<table class="table">
+		<thead>
+		<tr>
+			<th>Summary</th>
+		</tr>
+		</thead>
+		<tbody>
+		@foreach (var item in _withUrl)
+		{
+			<tr>
+				<td>@item.Summary</td>
+			</tr>
+		}
+		</tbody>
+	</table>
+}
+
+@if (_withSdk == null)
+{
+	<p><em>Loading...</em></p>
+}
+else
+{
+	<h2>With SDK</h2>
+	<table class="table">
+		<thead>
+		<tr>
+			<th>Summary</th>
+		</tr>
+		</thead>
+		<tbody>
+			@foreach (var item in _withSdk)
+		{
+			<tr>
+				<td>@item.Summary</td>
+			</tr>
+		}
+		</tbody>
+	</table>
+}
+
+@code {
+	private MyClass[]? _withUrl;
+	private MyClass[]? _withSdk;
+
+	protected override async Task OnInitializedAsync()
+	{
+		try
+		{
+			_withUrl = await DaprService.GetWithUrlAsync();
+		}
+		catch (Exception ex)
+		{
+			_withUrl = new List<MyClass> {
+				new() {Summary = ex.Message},
+				new() {Summary = ex?.InnerException?.Message}
+			}.ToArray();
+		}
+
+		try
+		{
+			_withSdk = await DaprService.GetWithSdkAsync();
+		}
+		catch (Exception ex)
+		{
+			_withSdk = new List<MyClass> {
+				new() {Summary = ex.Message},
+				new() {Summary = ex?.InnerException?.Message}
+			}.ToArray();
+		}
+	}
+}
