@@ -141,7 +141,7 @@ resource "azurerm_log_analytics_workspace" "log_analytics_workspace" {
 resource "azurerm_role_assignment" "role_assignment_dapr" {
   role_definition_name = "App Configuration Data Reader"
   scope                = azurerm_app_configuration.app_configuration.id
-  principal_id         = azurerm_user_assigned_identity.user_assigned_identity_dapr.principal_id
+  principal_id         = "c7444f6c-70e5-4b24-bbd4-31401b202d7f"
 }
 resource "azurerm_app_configuration" "app_configuration" {
   name                = var.app_configuration
@@ -231,7 +231,7 @@ resource "azurerm_container_app_environment_dapr_component" "dapr_component_conf
   }
   metadata {
     name  = "azureClientId"
-    value = azurerm_user_assigned_identity.user_assigned_identity_dapr.client_id
+    value = "003352ec-fdcd-48e1-8fab-7d9cc45c6195"
   }
   scopes = [
     var.container_app_suffix_api

@@ -82,7 +82,7 @@ jobs:
 
           if ($branch -eq "${{env.productionBranch}}" -or "${{github.event.inputs.environment}}" -eq "production") {
             $isProduction = 1;
-            $environment = "production";
+            $environment = "production2";
           }
           elseif ($branch -eq  "${{env.stagingBranch}}" -or "${{github.event.inputs.environment}}" -eq "staging") {
             $isStaging = 1;
