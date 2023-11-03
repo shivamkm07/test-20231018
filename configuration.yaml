@@ -1,0 +1,9 @@
+componentType: configuration.azure.appconfig
+version: v1
+metadata:
+  - name: host # host should be used when Azure Authentication mechanism is used.
+    value: "https://arkham-setup.azconfig.io"
+  - name: azureClientId # Optional
+    value: "003352ec-fdcd-48e1-8fab-7d9cc45c6195"
+scopes:
+  - myapp

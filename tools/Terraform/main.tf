@@ -101,140 +101,140 @@ resource "azurerm_resource_group" "environment" {
 }
 
 
-resource "azuread_application_registration" "application" {
-  display_name = azurerm_resource_group.environment.name
-}
-resource "azuread_application_password" "application_password" {
-  application_id = azuread_application_registration.application.id
-  display_name          = "rbac"
-}
-resource "azuread_service_principal" "service_principal" {
-	client_id                    = azuread_application_registration.application.client_id
-  app_role_assignment_required = false
-  use_existing                 = true
-  description                  = "Continues-integration services 'deployment' account"
-}
-resource "azurerm_role_assignment" "role_assignment_contributor" {
-  role_definition_name = "Contributor"
-  principal_id         = azuread_service_principal.service_principal.id
-  scope                = azurerm_resource_group.environment.id
-}
-output "azuread_service_principal_credentials" {
-  sensitive = true
-  value = {
-    clientId       : azuread_service_principal.service_principal.client_id
-    clientSecret   : resource.azuread_application_password.application_password.value
-    subscriptionId : data.azurerm_client_config.current.subscription_id
-    tenantId       : azuread_service_principal.service_principal.application_tenant_id
-  }
-}
+# resource "azuread_application_registration" "application" {
+#   display_name = azurerm_resource_group.environment.name
+# }
+# resource "azuread_application_password" "application_password" {
+#   application_id = azuread_application_registration.application.id
+#   display_name          = "rbac"
+# }
+# resource "azuread_service_principal" "service_principal" {
+# 	client_id                    = azuread_application_registration.application.client_id
+#   app_role_assignment_required = false
+#   use_existing                 = true
+#   description                  = "Continues-integration services 'deployment' account"
+# }
+# resource "azurerm_role_assignment" "role_assignment_contributor" {
+#   role_definition_name = "Contributor"
+#   principal_id         = azuread_service_principal.service_principal.id
+#   scope                = azurerm_resource_group.environment.id
+# }
+# output "azuread_service_principal_credentials" {
+#   sensitive = true
+#   value = {
+#     clientId       : azuread_service_principal.service_principal.client_id
+#     clientSecret   : resource.azuread_application_password.application_password.value
+#     subscriptionId : data.azurerm_client_config.current.subscription_id
+#     tenantId       : azuread_service_principal.service_principal.application_tenant_id
+#   }
+# }
 
 
-resource "azurerm_log_analytics_workspace" "log_analytics_workspace" {
-  name                = var.log_analytics_workspace
-  resource_group_name = azurerm_resource_group.environment.name
-  location            = azurerm_resource_group.environment.location
-  retention_in_days   = 30
-  daily_quota_gb      = 0.5
-}
+# resource "azurerm_log_analytics_workspace" "log_analytics_workspace" {
+#   name                = var.log_analytics_workspace
+#   resource_group_name = azurerm_resource_group.environment.name
+#   location            = azurerm_resource_group.environment.location
+#   retention_in_days   = 30
+#   daily_quota_gb      = 0.5
+# }
 
-resource "azurerm_role_assignment" "role_assignment_dapr" {
-  role_definition_name = "App Configuration Data Reader"
-  scope                = azurerm_app_configuration.app_configuration.id
-  principal_id         = "c7444f6c-70e5-4b24-bbd4-31401b202d7f"
-}
-resource "azurerm_app_configuration" "app_configuration" {
-  name                = var.app_configuration
-  resource_group_name = azurerm_resource_group.environment.name
-  location            = azurerm_resource_group.environment.location
-  sku                 = "standard"
-  #   sku                 = "free"
-}
-
-
-resource "azurerm_container_registry" "container_registry" {
-  name                = var.container_registry
-  resource_group_name = azurerm_resource_group.environment.name
-  location            = azurerm_resource_group.environment.location
-  sku                 = "Basic"
-  admin_enabled       = true
-}
-output "container_registry_login_server" {
-  value = azurerm_container_registry.container_registry.login_server
-}
-resource "azurerm_container_registry_scope_map" "container_registry_scope_map" {
-  name                    = var.container_registry_scope_map
-  resource_group_name     = azurerm_resource_group.environment.name
-  container_registry_name = azurerm_container_registry.container_registry.name
-  actions = [
-    "repositories/${local.container_app_api}/content/read",
-    "repositories/${local.container_app_api}/content/write"
-  ]
-}
-resource "azurerm_container_registry_token" "container_registry_token" {
-  name                    = var.container_registry_token
-  resource_group_name     = azurerm_resource_group.environment.name
-  container_registry_name = azurerm_container_registry.container_registry.name
-  scope_map_id            = azurerm_container_registry_scope_map.container_registry_scope_map.id
-}
+# resource "azurerm_role_assignment" "role_assignment_dapr" {
+#   role_definition_name = "App Configuration Data Reader"
+#   scope                = azurerm_app_configuration.app_configuration.id
+#   principal_id         = "c7444f6c-70e5-4b24-bbd4-31401b202d7f"
+# }
+# resource "azurerm_app_configuration" "app_configuration" {
+#   name                = var.app_configuration
+#   resource_group_name = azurerm_resource_group.environment.name
+#   location            = azurerm_resource_group.environment.location
+#   sku                 = "standard"
+#   #   sku                 = "free"
+# }
 
 
-resource "null_resource" "default_docker_image_pull_push" {
-  provisioner "local-exec" {
-    command = <<EOL
-	  $image = "nginx:alpine";
-    az acr login --name ${azurerm_container_registry.container_registry.name};
-    $exists = az acr repository show --name ${azurerm_container_registry.container_registry.name} --image $image --output tsv 2>$null;
-    if (-not $exists) {
-      docker pull $image;
-      docker tag $image ${azurerm_container_registry.container_registry.login_server}/$image;
-      docker push ${azurerm_container_registry.container_registry.login_server}/$image;
-	  }
-    EOL
-    environment = {
-      DOCKER_CLI_AZURE_AUTH_MODE = "native"
-    }
-    interpreter = ["PowerShell", "-Command"]
-  }
-  triggers = {
-    # always_run = "${timestamp()}"
-    registry_id = azurerm_container_registry.container_registry.id
-  }
-  depends_on = [
-    azurerm_container_registry.container_registry
-  ]
-}
+# resource "azurerm_container_registry" "container_registry" {
+#   name                = var.container_registry
+#   resource_group_name = azurerm_resource_group.environment.name
+#   location            = azurerm_resource_group.environment.location
+#   sku                 = "Basic"
+#   admin_enabled       = true
+# }
+# output "container_registry_login_server" {
+#   value = azurerm_container_registry.container_registry.login_server
+# }
+# resource "azurerm_container_registry_scope_map" "container_registry_scope_map" {
+#   name                    = var.container_registry_scope_map
+#   resource_group_name     = azurerm_resource_group.environment.name
+#   container_registry_name = azurerm_container_registry.container_registry.name
+#   actions = [
+#     "repositories/${local.container_app_api}/content/read",
+#     "repositories/${local.container_app_api}/content/write"
+#   ]
+# }
+# resource "azurerm_container_registry_token" "container_registry_token" {
+#   name                    = var.container_registry_token
+#   resource_group_name     = azurerm_resource_group.environment.name
+#   container_registry_name = azurerm_container_registry.container_registry.name
+#   scope_map_id            = azurerm_container_registry_scope_map.container_registry_scope_map.id
+# }
+
+
+# resource "null_resource" "default_docker_image_pull_push" {
+#   provisioner "local-exec" {
+#     command = <<EOL
+# 	  $image = "nginx:alpine";
+#     az acr login --name ${azurerm_container_registry.container_registry.name};
+#     $exists = az acr repository show --name ${azurerm_container_registry.container_registry.name} --image $image --output tsv 2>$null;
+#     if (-not $exists) {
+#       docker pull $image;
+#       docker tag $image ${azurerm_container_registry.container_registry.login_server}/$image;
+#       docker push ${azurerm_container_registry.container_registry.login_server}/$image;
+# 	  }
+#     EOL
+#     environment = {
+#       DOCKER_CLI_AZURE_AUTH_MODE = "native"
+#     }
+#     interpreter = ["PowerShell", "-Command"]
+#   }
+#   triggers = {
+#     # always_run = "${timestamp()}"
+#     registry_id = azurerm_container_registry.container_registry.id
+#   }
+#   depends_on = [
+#     azurerm_container_registry.container_registry
+#   ]
+# }
 
 
 resource "azurerm_container_app_environment" "container_app_environment" {
   name                       = var.container_app_environment
   location                   = azurerm_resource_group.environment.location
   resource_group_name        = azurerm_resource_group.environment.name
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace.id
-  depends_on = [
-    null_resource.default_docker_image_pull_push
-  ]
+  # log_analytics_workspace_id = azurerm_log_analytics_workspace.log_analytics_workspace.id
+  # depends_on = [
+  #   null_resource.default_docker_image_pull_push
+  # ]
 }
-resource "azurerm_user_assigned_identity" "user_assigned_identity_dapr" {
-  name                = var.user_assigned_identity_dapr
-  resource_group_name = azurerm_resource_group.environment.name
-  location            = azurerm_resource_group.environment.location
-}
+# resource "azurerm_user_assigned_identity" "user_assigned_identity_dapr" {
+#   name                = var.user_assigned_identity_dapr
+#   resource_group_name = azurerm_resource_group.environment.name
+#   location            = azurerm_resource_group.environment.location
+# }
 resource "azurerm_container_app_environment_dapr_component" "dapr_component_configurationstore" {
   name                         = "configuration"
-  container_app_environment_id = azurerm_container_app_environment.container_app_environment.id
+  container_app_environment_id = azurerm_container_app_environment.container_app_environment.id #"/subscriptions/cb58023b-caf0-4b5e-9a01-4b9cc66960db/resourceGroups/my-container-apps/providers/Microsoft.App/managedEnvironments/my-environment" 
   component_type               = "configuration.azure.appconfig"
   version                      = "v1"
   metadata {
     name  = "host"
-    value = azurerm_app_configuration.app_configuration.endpoint
+    value = "https://arkham-setup.azconfig.io"
   }
   metadata {
     name  = "azureClientId"
     value = "003352ec-fdcd-48e1-8fab-7d9cc45c6195"
   }
   scopes = [
-    var.container_app_suffix_api
+    var.container_app_suffix_api#"myapp"
   ]
 }
 
@@ -248,17 +248,17 @@ resource "azurerm_container_app" "container_app_api" {
   template {
     container {
       name   = var.container_app_suffix_api
-      image  = "${azurerm_container_registry.container_registry.login_server}/nginx:alpine"
+      image  = "shivamkm07/myapp:dev"
       cpu    = 0.25
       memory = "0.5Gi"
-      env {
-        name  = var.environment_variable_name
-        value = var.environment
-      }
-      env {
-        name        = "TestEnvironmentVariable"
-        secret_name = "mysecret"
-      }
+      # env {
+      #   name  = var.environment_variable_name
+      #   value = var.environment
+      # }
+      # env {
+      #   name        = "TestEnvironmentVariable"
+      #   secret_name = "mysecret"
+      # }
     }
     min_replicas = 1
     max_replicas = 1
@@ -268,28 +268,28 @@ resource "azurerm_container_app" "container_app_api" {
       template[0].container[0].image,
     ]
   }
-  secret {
-    name  = "mysecret"
-    value = azurerm_resource_group.environment.name
-  }
-  secret {
-    name  = "registry-admin-password"
-    value = azurerm_container_registry.container_registry.admin_password
-  }
-  registry {
-    server               = azurerm_container_registry.container_registry.login_server
-    username             = azurerm_container_registry.container_registry.admin_username
-    password_secret_name = "registry-admin-password"
-  }
-  ingress {
-    allow_insecure_connections = false
-    external_enabled           = true
-    target_port                = 80
-    traffic_weight {
-      latest_revision = true
-      percentage      = 100
-    }
-  }
+  # secret {
+  #   name  = "mysecret"
+  #   value = azurerm_resource_group.environment.name
+  # }
+  # secret {
+  #   name  = "registry-admin-password"
+  #   value = azurerm_container_registry.container_registry.admin_password
+  # }
+  # registry {
+  #   server               = azurerm_container_registry.container_registry.login_server
+  #   username             = azurerm_container_registry.container_registry.admin_username
+  #   password_secret_name = "registry-admin-password"
+  # }
+  # ingress {
+  #   allow_insecure_connections = false
+  #   external_enabled           = true
+  #   target_port                = 80
+  #   traffic_weight {
+  #     latest_revision = true
+  #     percentage      = 100
+  #   }
+  # }
   dapr {
     app_id       = var.container_app_suffix_api
     app_port     = 80
